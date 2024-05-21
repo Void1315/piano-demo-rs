@@ -6,10 +6,10 @@ use self::base::*;
 use self::header::*;
 use self::tracks::*;
 
-mod base;
-mod header;
-mod tracks;
-mod midi_message;
+pub mod base;
+pub mod header;
+pub mod tracks;
+pub mod midi_message;
 
 // 只看三位
 const NOTE_OFF_VALUE: u8 = 0x00 << 4;

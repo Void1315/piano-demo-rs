@@ -1,7 +1,7 @@
 use std::error::Error;
 use bitflags::bitflags;
 
-pub trait Parser
+pub(crate) trait Parser
 where
     Self: Sized,
 {

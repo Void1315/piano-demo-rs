@@ -38,7 +38,7 @@ impl MidiMessage {
         // deleta_time 的解析方式是 midi变长int 每次读一个字节， 判断最高位是否为1 如果是1则继续读取下一个字节
         loop {
             if let Some(midi_delta_time) = MidiInt::from_bits(raw_data[cursor]) {
-                delta_time.push(midi_delta_time);
+                delta_time.push(midi_delta_time.clone());
                 cursor += 1;
                 if !midi_delta_time.contains(MidiInt::flag) {
                     break;
@@ -47,6 +47,7 @@ impl MidiMessage {
                 return Err("delta time error".into());
             }
         }
+        midi_message.m_delta_time = delta_time;
         // 解析状态字节
         if let Some(status) = MidiStatusByte::from_bits(raw_data[cursor]) {
             // 如果status 的最高位为1 则表示这是一个状态字节
