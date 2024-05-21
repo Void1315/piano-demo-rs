@@ -20,10 +20,10 @@ use crate::{
 mod config;
 mod midi_derive;
 mod output_derive;
-mod read_midi_file;
+mod midi_format;
 mod synthesizers;
 fn main() {
-    read_midi_file::test();
+    midi_format::test();
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
