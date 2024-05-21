@@ -528,6 +528,7 @@ dependencies = [
 name = "piano_demo"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.5.0",
  "cpal",
  "midir",
  "rustysynth",

@@ -1,8 +1,5 @@
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
-
+#![allow(unused_imports)]
+#![allow(dead_code)]
 use config::CONFIG;
 use cpal::{
     traits::{DeviceTrait, StreamTrait},
@@ -10,6 +7,10 @@ use cpal::{
 };
 use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use rustysynth::Synthesizer;
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     midi_derive::init_midi_derive, output_derive::init_output_derive,
@@ -19,11 +20,10 @@ use crate::{
 mod config;
 mod midi_derive;
 mod output_derive;
+mod read_midi_file;
 mod synthesizers;
 fn main() {
-    if let Err(e) = run() {
-        eprintln!("Error: {}", e);
-    }
+    read_midi_file::test();
 }
 
 fn run() -> Result<(), Box<dyn Error>> {

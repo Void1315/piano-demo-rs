@@ -14,6 +14,7 @@ pub fn init_synthesizers() -> Result<Arc<Mutex<Synthesizer>>, Box<dyn Error>> {
     let settings = SynthesizerSettings::new(CONFIG.sample_rate as i32);
     let synthesizer: Synthesizer =  Synthesizer::new(&sound_font, &settings)?;
     let synthesizer: Arc<Mutex<Synthesizer>> = Arc::new(Mutex::new(synthesizer));
+    synthesizer.lock().unwrap().set_master_volume(12f32);
     Ok(synthesizer)
 }
 
