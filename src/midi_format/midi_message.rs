@@ -40,9 +40,7 @@ impl MidiMessage {
             if let Some(midi_delta_time) = MidiInt::from_bits(raw_data[cursor]) {
                 delta_time.push(midi_delta_time);
                 cursor += 1;
-                if midi_delta_time.contains(MidiInt::flag) {
-                    continue;
-                } else {
+                if !midi_delta_time.contains(MidiInt::flag) {
                     break;
                 }
             } else {
@@ -121,9 +119,11 @@ impl MidiMessage {
                 cursor += 1;
             }
             PITCH_WHEEL_VALUE => {
+                // 弯音 特殊处理
+                let value =  u16::from_be_bytes(raw_data[cursor..cursor + 2].try_into()?) & 0x7E;
                 midi_message.m_ment_event = Event::Midi {
                     message: MessageEvent::PitchWheel {
-                        value: u16::from_be_bytes(raw_data[cursor..cursor + 2].try_into()?),
+                        value: value,
                     },
                 };
                 cursor += 2;

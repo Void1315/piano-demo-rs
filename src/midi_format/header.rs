@@ -1,5 +1,5 @@
-use std::error::Error;
 use super::base::Parser;
+use std::{error::Error, io::Cursor, mem::take};
 
 #[derive(Debug)]
 pub struct Header {
@@ -10,6 +10,13 @@ pub struct Header {
     pub m_time_division: u16, // 时间分辨率
 }
 
+const HEADER_MAGIC_SIZE: usize = 4;
+const HEADER_SCELEN_SIZE: usize = 4;
+const HEADER_FORMAT_SIZE: usize = 2;
+const HEADER_NTRACKS_SIZE: usize = 2;
+const HEADER_TICKDIV_SIZE: usize = 2;
+
+const HEADER_SIZE: usize = 14;
 impl Parser for Header {
     fn new(_: &[u8]) -> Self {
         Header {
@@ -24,20 +31,39 @@ impl Parser for Header {
     fn get_raw(&self) -> Vec<u8> {
         todo!()
     }
-
     fn parse(raw_data: &[u8]) -> Result<Header, Box<dyn Error>> {
-        let m_magic = raw_data[0..4].try_into()?; // MIDI头部标识 值为"MThd"或者 "MTrk"
-        let m_header_size = u32::from_be_bytes(raw_data[4..8].try_into()?); // 头部大小
-        let m_format = u16::from_be_bytes(raw_data[8..10].try_into()?); // MIDI格式
-        let m_num_tracks = u16::from_be_bytes(raw_data[10..12].try_into()?); // 音轨数
-        let m_time_division = u16::from_be_bytes(raw_data[12..14].try_into()?); // 时间分辨率
-        let header = Header {
+        let mut cursor = 0;
+        let m_magic: [u8; 4] = raw_data[..HEADER_MAGIC_SIZE].try_into().unwrap();
+        cursor += HEADER_MAGIC_SIZE;
+        let m_header_size = u32::from_be_bytes(
+            raw_data[cursor..cursor + HEADER_SCELEN_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+        cursor += HEADER_SCELEN_SIZE;
+        let m_format = u16::from_be_bytes(
+            raw_data[cursor..cursor + HEADER_FORMAT_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+        cursor += HEADER_FORMAT_SIZE;
+        let m_num_tracks = u16::from_be_bytes(
+            raw_data[cursor..cursor + HEADER_NTRACKS_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+        cursor += HEADER_NTRACKS_SIZE;
+        let m_time_division = u16::from_be_bytes(
+            raw_data[cursor..cursor + HEADER_TICKDIV_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+        Ok(Header {
             m_magic,
             m_header_size,
             m_format,
             m_num_tracks,
             m_time_division,
-        };
-        Ok(header)
+        })
     }
 }
