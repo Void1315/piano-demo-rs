@@ -9,12 +9,15 @@ use cpal::{
 };
 use midi_format::MidiFile;
 use midir::{MidiInput, MidiInputConnection, MidiInputPort};
-use rustysynth::Synthesizer;
+use rustysynth::{MidiFile as RustysynthMidiFile, MidiFileSequencer, Synthesizer};
 use std::{
+    cell::RefCell,
     error::Error,
-    sync::{Arc, Mutex},
+    fs,
+    sync::{Arc, Mutex, RwLock},
     thread::sleep,
 };
+use synthesizers::init_unlocked_synthesizers;
 
 use crate::{
     midi_derive::init_midi_derive,
@@ -32,50 +35,21 @@ mod output_derive;
 mod synthesizers;
 fn main() {
     // midi_format::test();
-    play_midi();
+    play_midi2();
 }
 
-fn play_midi() {
-    let (mut synthesizer, out_put_derive) = init_conn().unwrap();
-    let _output_conn = bind_synthesizer_to_output::<f32>(&mut synthesizer, &out_put_derive);
+fn play_midi2() {
+    let synthesizer = init_unlocked_synthesizers().unwrap();
+    let out_put_derive = init_output_derive().unwrap();
+
+    let mut buffer = fs::File::open("test_assets/sanye.mid").unwrap();
+    let midi_file = Arc::new(RustysynthMidiFile::new(&mut buffer).unwrap());
+    let midi_file_sequencer = Arc::new(Mutex::new(MidiFileSequencer::new(synthesizer)));
+    midi_file_sequencer.lock().unwrap().play(&midi_file, false);
+    let _output_conn =
+        bind_midifilesequencer_to_output(&midi_file_sequencer.clone(), &out_put_derive);
     _output_conn.play().unwrap();
-    let midi_file = MidiFile::parse(include_bytes!("../test_assets/sanye.mid")).unwrap();
-    let trackdiv = midi_file.header.m_time_division; // 一个四分音符的时间
-    let one_tick: u32 = 545455 / 480; // TODO: 计算出来
-    for track in midi_file.tracks.0.iter() {
-        for message in track.m_midi_message.iter() {
-            let event: &Event = &message.m_ment_event;
-            let mut sum_tick: u64 = 0;
-
-            for (index, ti) in message.m_delta_time.iter().rev().enumerate() {
-                let _ti = (MidiInt::data & *ti).bits() as u32;
-                let bi = _ti * 128u32.pow(index as u32) as u32;
-                sum_tick += bi as u64;
-            }
-
-            let _r: u64 = sum_tick * one_tick as u64;
-            let delay_time = time::Duration::from_micros(_r);
-            sleep(delay_time);
-            println!("delay_time: {_r}ms  event: {event:?}");
-            match event {
-                Event::Midi {
-                    message: message_event,
-                } => match message_event {
-                    // TODO: 还有一些事件需要实现
-                    MessageEvent::NoteOn { key, velocity } => synthesizer.lock().unwrap().note_on(
-                        0,
-                        key.bits() as i32,
-                        velocity.bits() as i32,
-                    ),
-                    MessageEvent::NoteOff { key, velocity } => {
-                        synthesizer.lock().unwrap().note_off(0, key.bits() as i32)
-                    }
-                    _ => (),
-                },
-                Event::None => todo!(),
-            }
-        }
-    }
+    loop {}
 }
 
 fn init_conn() -> Result<(Arc<Mutex<Synthesizer>>, Device), Box<dyn Error>> {
@@ -143,7 +117,7 @@ where
         .build_output_stream(
             &config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                write_data(data, channels, &mut _synthesizer)
+                write_data2_synthesizer(data, channels, &mut _synthesizer)
             },
             err_fn,
             None,
@@ -152,7 +126,46 @@ where
     stream
 }
 
-fn write_data(data: &mut [f32], _channels: usize, synthesizer: &Arc<Mutex<Synthesizer>>) {
+fn bind_midifilesequencer_to_output(
+    midi_file_sequencer: &Arc<Mutex<MidiFileSequencer>>,
+    output_device: &Device,
+) -> cpal::Stream {
+    let _midi_file_sequencer = midi_file_sequencer.clone();
+    let config = output_device.default_output_config().unwrap();
+    let config: StreamConfig = config.into();
+    let channels = config.channels as usize;
+    let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
+    let stream: cpal::Stream = output_device
+        .build_output_stream(
+            &config,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                write_data2_midi_file_sequencer(data, channels, &_midi_file_sequencer)
+            },
+            err_fn,
+            None,
+        )
+        .unwrap();
+    stream
+}
+
+fn write_data2_midi_file_sequencer(
+    data: &mut [f32],
+    _channels: usize,
+    midi_file_sequencer: &Arc<Mutex<MidiFileSequencer>>,
+) {
+    let mut left: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
+    let mut right: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
+    midi_file_sequencer
+        .lock()
+        .unwrap()
+        .render(&mut left, &mut right);
+    for index in 0..CONFIG.channel_sample_count as usize {
+        data[index * 2] = left[index];
+        data[index * 2 + 1] = right[index];
+    }
+}
+
+fn write_data2_synthesizer(data: &mut [f32], _channels: usize, synthesizer: &Arc<Mutex<Synthesizer>>) {
     let mut synthesizer = synthesizer.lock().unwrap();
     let mut left: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
     let mut right: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
