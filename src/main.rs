@@ -1,31 +1,20 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
-use bitflags::Flags;
 use config::CONFIG;
-use core::time;
 use cpal::{
     traits::{DeviceTrait, StreamTrait},
     Device, FromSample, SizedSample, StreamConfig,
 };
-use midi_format::MidiFile;
 use midir::{MidiInput, MidiInputConnection, MidiInputPort};
 use rustysynth::{MidiFile as RustysynthMidiFile, MidiFileSequencer, Synthesizer};
 use std::{
-    cell::RefCell,
     error::Error,
     fs,
-    sync::{Arc, Mutex, RwLock},
-    thread::sleep,
+    sync::{Arc, Mutex},
+    thread, time,
 };
 use synthesizers::init_unlocked_synthesizers;
 
 use crate::{
-    midi_derive::init_midi_derive,
-    midi_format::{
-        base::*,
-        midi_message::{Event, MessageEvent, MidiMessage},
-    },
-    output_derive::init_output_derive,
+    midi_derive::init_midi_derive, output_derive::init_output_derive,
     synthesizers::init_synthesizers,
 };
 mod config;
@@ -34,22 +23,31 @@ mod midi_format;
 mod output_derive;
 mod synthesizers;
 fn main() {
-    // midi_format::test();
-    play_midi2();
+    // let _ = run();
+    let handle = thread::spawn(|| {
+        play_midi_for_file("test_assets/sanye.mid");
+    });
+    handle.join().unwrap();
 }
 
-fn play_midi2() {
+fn play_midi_for_file(file_path: &str) {
     let synthesizer = init_unlocked_synthesizers().unwrap();
     let out_put_derive = init_output_derive().unwrap();
 
-    let mut buffer = fs::File::open("test_assets/sanye.mid").unwrap();
+    let mut buffer = fs::File::open(file_path).unwrap();
     let midi_file = Arc::new(RustysynthMidiFile::new(&mut buffer).unwrap());
+    let end_time = midi_file.get_length(); // 时长
+    display_midi_info(end_time,file_path);
     let midi_file_sequencer = Arc::new(Mutex::new(MidiFileSequencer::new(synthesizer)));
     midi_file_sequencer.lock().unwrap().play(&midi_file, false);
     let _output_conn =
         bind_midifilesequencer_to_output(&midi_file_sequencer.clone(), &out_put_derive);
     _output_conn.play().unwrap();
-    loop {}
+    thread::sleep(time::Duration::from_secs_f64(end_time));
+}
+
+fn display_midi_info(midi_duration: f64, file_path: &str){
+    println!("播放 {file_path} 文件\n 音乐时长为 {midi_duration}s");
 }
 
 fn init_conn() -> Result<(Arc<Mutex<Synthesizer>>, Device), Box<dyn Error>> {
@@ -58,10 +56,10 @@ fn init_conn() -> Result<(Arc<Mutex<Synthesizer>>, Device), Box<dyn Error>> {
     Ok((synthesizer, out_put_derive))
 }
 
+#[allow(dead_code)]
 fn run() -> Result<(), Box<dyn Error>> {
     let (midi_in, port) = init_midi_derive()?;
-    let mut synthesizer = init_synthesizers()?;
-    let out_put_derive = init_output_derive()?;
+    let (mut synthesizer, out_put_derive) = init_conn()?;
 
     // 1. 将midi输入链接到合成器
     let _midi_conn = bind_midi_to_synthesizer(midi_in, &port, &mut synthesizer);
@@ -70,7 +68,6 @@ fn run() -> Result<(), Box<dyn Error>> {
     _output_conn.play()?;
 
     loop {} // 防止主线程退出
-    #[allow(unreachable_code)]
     Ok(())
 }
 fn bind_midi_to_synthesizer(
@@ -165,7 +162,11 @@ fn write_data2_midi_file_sequencer(
     }
 }
 
-fn write_data2_synthesizer(data: &mut [f32], _channels: usize, synthesizer: &Arc<Mutex<Synthesizer>>) {
+fn write_data2_synthesizer(
+    data: &mut [f32],
+    _channels: usize,
+    synthesizer: &Arc<Mutex<Synthesizer>>,
+) {
     let mut synthesizer = synthesizer.lock().unwrap();
     let mut left: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
     let mut right: Vec<f32> = vec![0f32; CONFIG.channel_sample_count as usize];
